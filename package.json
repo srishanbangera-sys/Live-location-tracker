@@ -7,7 +7,7 @@
     "start": "node .",
     "dev": "nodemon -e .html,.js ."
   },
-  "author": "",
+  "author": "srishanbangera",
   "license": "ISC",
   "dependencies": {
     "cloudflared": "^0.5.3",

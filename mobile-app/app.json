@@ -1,0 +1,35 @@
+{
+  "expo": {
+    "name": "Location Tracer",
+    "slug": "location-tracer-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "backgroundColor": "#0f172a"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "location",
+          "fetch"
+        ],
+        "NSLocationWhenInUseUsageDescription": "Location Tracer requires location access to display weather telemetry.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Location Tracer requires background location access to continuously stream GPS coordinates 24/7.",
+        "NSLocationAlwaysUsageDescription": "Location Tracer requires background location access to continuously stream GPS coordinates 24/7."
+      }
+    },
+    "android": {
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION",
+        "RECEIVE_BOOT_COMPLETED",
+        "WAKE_LOCK"
+      ]
+    }
+  }
+}

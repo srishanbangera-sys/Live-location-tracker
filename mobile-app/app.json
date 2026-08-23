@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Location Tracer",
-    "slug": "location-tracer-mobile",
+    "name": "Weather Radar",
+    "slug": "weather-radar-mobile",
     "version": "1.0.0",
     "sdkVersion": "54.0.0",
     "orientation": "portrait",
@@ -16,9 +16,9 @@
           "location",
           "fetch"
         ],
-        "NSLocationWhenInUseUsageDescription": "Location Tracer requires location access to display weather telemetry.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "Location Tracer requires background location access to continuously stream GPS coordinates 24/7.",
-        "NSLocationAlwaysUsageDescription": "Location Tracer requires background location access to continuously stream GPS coordinates 24/7."
+        "NSLocationWhenInUseUsageDescription": "Weather Radar requires your location to display local temperature and precipitation alerts.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Weather Radar requires location access to provide background severe weather and rain alerts 24/7.",
+        "NSLocationAlwaysUsageDescription": "Weather Radar requires location access to provide background severe weather and rain alerts 24/7."
       }
     },
     "android": {

